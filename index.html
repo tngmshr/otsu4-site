@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="theme-color" content="#176459">
+  <meta name="description" content="乙種第4類のテキスト・問題演習・復習を、いつでも手元に。">
+  <title>乙4 合格ドリル</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="css/app.css">
+  <script defer src="js/core.js"></script>
+  <script defer src="js/ui.js"></script>
+  <script defer src="js/views.js"></script>
+  <script defer src="js/lock.js"></script>
+  <script defer src="js/app.js"></script>
+  <!-- app.js loads data/hourei.js, data/butsuka.js and data/seishou.js independently.
+       data/dev-sample.js is loaded only with ?dev=1. Missing files are optional. -->
+</head>
+<body>
+  <a class="skip" href="#main">本文へ</a>
+  <div class="shell">
+    <header class="topbar">
+      <a href="#/home" class="brand"><img src="icons/icon.svg" alt="" width="34" height="34"><span>乙4 <strong>合格ドリル</strong></span></a>
+      <a class="icon-button" href="#/settings" aria-label="設定">⚙</a>
+    </header>
+    <div id="status" role="status" aria-live="polite"></div>
+    <main id="main" tabindex="-1"><p class="empty">学習データを読み込んでいます…</p></main>
+    <nav class="tabs" aria-label="メインメニュー">
+      <a href="#/home" data-tab="home"><span aria-hidden="true">⌂</span>ホーム</a>
+      <a href="#/text" data-tab="text"><span aria-hidden="true">▤</span>テキスト</a>
+      <a href="#/practice" data-tab="practice"><span aria-hidden="true">✎</span>演習</a>
+      <a href="#/cards" data-tab="cards"><span aria-hidden="true">▣</span>暗記</a>
+      <a href="#/records" data-tab="records"><span aria-hidden="true">▥</span>記録</a>
+    </nav>
+  </div>
+  <noscript>このアプリの利用にはJavaScriptを有効にしてください。</noscript>
+</body>
+</html>
