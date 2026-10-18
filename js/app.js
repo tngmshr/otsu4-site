@@ -29,7 +29,7 @@
     const now = Date.now();
     U.state.active = { id: `${now}-${Math.random().toString(36).slice(2, 8)}`, mode, keys: list.map(q => q.key),
       answers: {}, index: 0, started: now, deadline: mode === 'mock' ? now + 7200000 : 0, finished: false };
-    U.state.lastRoute = '#/session'; U.message = ''; U.save(); U.go('session');
+    U.state.lastRoute = '#/session'; U.message = ''; U.resultFilter = 'all'; U.save(); U.go('session');
   }
   function finish(automatic = false) {
     const a = U.state.active;
@@ -45,10 +45,10 @@
       }
     }
     a.finished = true;
-    if (a.mode === 'mock') U.state.exams.push(JSON.parse(JSON.stringify(a)));
-    C.touch(U.state); U.save();
+    if (a.mode === 'mock') { U.state.exams.push(JSON.parse(JSON.stringify(a))); OTSU4Awards.recordClears(U.state, a); }
+    C.touch(U.state); const fresh = OTSU4Awards.evaluate(U.state); U.save();
     if (automatic) U.notify('制限時間になったため、模擬試験を終了して採点しました。');
-    U.go('session');
+    U.go('session'); OTSU4Awards.celebrate(fresh);
   }
   function checkTimer() {
     const a = U.state.active;
@@ -72,8 +72,8 @@
       const a = U.state.exams[Number(parts[1])]; html = a ? V.result(a) : U.empty('試験履歴はありません。');
     } else html = V[route] ? V[route]() : U.empty('ページが見つかりません。');
     document.getElementById('main').innerHTML = html;
-    document.title = `${({ home: 'ホーム', text: 'テキスト', practice: '問題演習', mock: '模擬試験', review: '苦手の復習', session: '解答', cards: '暗記カード', records: '学習の記録', settings: '設定', about: 'このアプリについて', guide: '試験ガイド', exam: '試験結果' })[route] || 'ホーム'} | 乙4 合格ドリル`;
-    const tab = ['mock', 'review', 'session', 'exam'].includes(route) ? 'practice' : route;
+    document.title = `${({ home: 'ホーム', text: 'テキスト', practice: '問題演習', mock: '模擬試験', review: '苦手の復習', session: '解答', cards: '暗記カード', records: '学習の記録', settings: '設定', about: 'このアプリについて', guide: '試験ガイド', exam: '試験結果', titles: '称号', ending: 'エンディング' })[route] || 'ホーム'} | 乙4道場`;
+    const tab = ['mock', 'review', 'session', 'exam'].includes(route) ? 'practice' : ['titles', 'ending'].includes(route) ? 'home' : route;
     for (const item of document.querySelectorAll('[data-tab]')) {
       if (item.dataset.tab === tab) item.setAttribute('aria-current', 'page'); else item.removeAttribute('aria-current');
     }
@@ -92,14 +92,20 @@
       if (!q || !Number.isInteger(value) || value < 0 || value > 4) return;
       if (a.mode !== 'mock' && Object.prototype.hasOwnProperty.call(a.answers, key)) return;
       a.answers[key] = value;
-      if (a.mode !== 'mock') C.recordAnswer(U.state, key, value === q.answer);
-      U.save(); U.render();
-      if (a.mode !== 'mock') document.querySelector('.explanation')?.scrollIntoView({ block: 'start' });
+      let fresh = [];
+      if (a.mode !== 'mock') { C.recordAnswer(U.state, key, value === q.answer); OTSU4Awards.recordClears(U.state, a); fresh = OTSU4Awards.evaluate(U.state); }
+      U.save(); U.render(); OTSU4Awards.celebrate(fresh);
+      if (a.mode !== 'mock') document.querySelector('.verdict')?.scrollIntoView({ block: 'nearest' });
     },
     previous() { const a = U.state.active; if (a && !a.finished && a.index > 0) { a.index--; U.save(); U.render(true); } },
     next() { const a = U.state.active; if (!a || a.finished) return; if (a.mode !== 'mock' && !Object.prototype.hasOwnProperty.call(a.answers, a.keys[a.index])) return; if (a.index < a.keys.length - 1) { a.index++; U.save(); U.render(true); } },
     jump(node) { const a = U.state.active, index = Number(node.dataset.index); if (a && !a.finished && a.mode === 'mock' && Number.isInteger(index) && index >= 0 && index < a.keys.length) { a.index = index; U.save(); U.render(true); } },
     finish() { finish(); },
+    'result-filter'(node) {
+      U.resultFilter = node.dataset.filter === 'wrong' ? 'wrong' : 'all'; U.render();
+      document.querySelector(`[data-action="result-filter"][data-filter="${U.resultFilter}"]`)?.focus();
+    },
+    'credits-skip'() { document.getElementById('credits')?.classList.add('static'); },
     flip() { U.flipped = !U.flipped; U.render(); },
     'card-known'() { rateCard(true); },
     'card-again'() { rateCard(false); },
@@ -140,7 +146,11 @@
   });
   document.addEventListener('change', async event => {
     const node = event.target;
-    if (node.dataset.read) { U.state.read[node.dataset.read] = node.checked; if (node.checked) C.touch(U.state); U.save(); }
+    if (node.dataset.read) {
+      U.state.read[node.dataset.read] = node.checked;
+      const fresh = node.checked ? (C.touch(U.state), OTSU4Awards.evaluate(U.state)) : [];
+      U.save(); OTSU4Awards.celebrate(fresh);
+    }
     else if (node.dataset.review) { C.setReview(U.state, node.dataset.review, node.checked); U.save(); }
     else if (node.closest('#practice-form')) {
       U.filters[node.name] = node.value;
@@ -204,6 +214,8 @@
       await script(path);
     }
     if (U.dev) await script('data/dev-sample.js');
+    // Titles already earned before this feature shipped are recorded quietly, without a celebration.
+    if (OTSU4Awards.evaluate(U.state).length) U.save();
     resetDeck(); loaded = true; U.render(); timer = setInterval(checkTimer, 1000);
   }
   boot().catch(() => {

@@ -46,7 +46,7 @@
   }
   function freshState() {
     return { version: 1, settings: { theme: 'system', font: 'normal', examDate: '' },
-      read: {}, answers: {}, cards: {}, days: [], exams: [], active: null, lastRoute: '#/text' };
+      read: {}, answers: {}, cards: {}, days: [], daily: {}, awards: {}, clears: {}, exams: [], active: null, lastRoute: '#/text' };
   }
   function localDate(date = new Date()) {
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
@@ -57,13 +57,16 @@
     return !Number.isNaN(date.getTime()) && localDate(date) === value;
   }
   function touch(state, date = localDate()) { if (!state.days.includes(date)) state.days.push(date); }
-  function recordAnswer(state, qkey, correct) {
+  // Per-day answer counts. Added after v1 shipped: older saves have no `daily`, so readers treat it as optional.
+  function recordAnswer(state, qkey, correct, date = localDate()) {
     const entry = state.answers[qkey] || { total: 0, correct: 0, streak: 0, weak: false, review: false };
     entry.total++; entry.correct += correct ? 1 : 0;
     entry.streak = correct ? entry.streak + 1 : 0;
     if (!correct) entry.weak = true;
     if (entry.streak >= 2) { entry.weak = false; entry.review = false; }
-    state.answers[qkey] = entry; touch(state);
+    state.answers[qkey] = entry; touch(state, date);
+    const daily = state.daily || (state.daily = {}), day = daily[date] || (daily[date] = { total: 0, correct: 0 });
+    day.total++; day.correct += correct ? 1 : 0;
     return entry;
   }
   function setReview(state, qkey, value) {
@@ -79,6 +82,36 @@
       if (e) { a.total += e.total; a.correct += e.correct; if (e.total) a.unique++; }
       return a;
     }, { total: 0, correct: 0, unique: 0 });
+  }
+  // 0 = not answered yet, 1: <40%, 2: <60% (below the pass line), 3: <80%, 4: 80%+.
+  function rateLevel(correct, total) {
+    if (!total) return 0;
+    const rate = correct / total;
+    return rate < .4 ? 1 : rate < .6 ? 2 : rate < .8 ? 3 : 4;
+  }
+  function progress(state) {
+    return SUBJECTS.map(s => {
+      const sub = subjects.get(s.id), bySection = new Map();
+      for (const q of sub.questions) { if (!bySection.has(q.section)) bySection.set(q.section, []); bySection.get(q.section).push(q); }
+      const sections = sub.chapters.flatMap(c => c.sections.map(sec => {
+        const own = bySection.get(sec.id) || [], stat = stats(state, own);
+        return { key: sec.key, title: sec.title, chapter: c.title, read: !!state.read[sec.key], questions: own.length,
+          ...stat, rate: stat.total ? stat.correct / stat.total : null, level: rateLevel(stat.correct, stat.total) };
+      }));
+      const stat = stats(state, sub.questions);
+      return { subject: s.id, short: s.short, available: sub.questions.length, ...stat,
+        rate: stat.total ? stat.correct / stat.total : null, readCount: sections.filter(x => x.read).length, sections };
+    });
+  }
+  // Oldest first, ending today. `studied` marks days in `days` (reading/cards, or answers saved before `daily` existed).
+  function recentDays(state, today = localDate(), count = 14) {
+    const days = new Set(state.days), daily = state.daily || {}, date = new Date(`${today}T12:00:00`), result = [];
+    for (let i = 0; i < count; i++) {
+      const key = localDate(date), entry = daily[key];
+      result.unshift({ date: key, total: entry ? entry.total : 0, correct: entry ? entry.correct : 0, studied: days.has(key) });
+      date.setDate(date.getDate() - 1);
+    }
+    return result;
   }
   function shuffle(list, random = Math.random) {
     const result = [...list];
@@ -126,6 +159,22 @@
     }
     if (!Array.isArray(input.days) || !input.days.every(validDate) || !Array.isArray(input.exams)) fail();
     out.days = [...new Set(input.days)];
+    if (input.daily !== undefined) {
+      if (!obj(input.daily)) fail();
+      for (const [k, v] of Object.entries(input.daily)) {
+        if (!validDate(k) || !obj(v) || !number(v.total) || !number(v.correct) || v.correct > v.total) fail();
+        out.daily[k] = { total: v.total, correct: v.correct };
+      }
+    }
+    // Titles and section clears (js/awards.js) were added later too; both are optional.
+    if (input.awards !== undefined) {
+      if (!obj(input.awards)) fail();
+      for (const [k, v] of Object.entries(input.awards)) { if (!/^[a-z0-9-]{1,40}$/.test(k) || !validDate(v)) fail(); out.awards[k] = v; }
+    }
+    if (input.clears !== undefined) {
+      if (!obj(input.clears)) fail();
+      for (const [k, v] of Object.entries(input.clears)) { if (!mapKey(k) || v !== true) fail(); out.clears[k] = true; }
+    }
     function session(x, completed = false) {
       if (!obj(x) || !['practice', 'review', 'mock'].includes(x.mode) || !Array.isArray(x.keys) || !x.keys.length ||
           !x.keys.every(mapKey) || new Set(x.keys).size !== x.keys.length || !number(x.index) || x.index >= x.keys.length ||
@@ -144,6 +193,6 @@
     if (typeof input.lastRoute === 'string' && /^#\/(text|session)(\/[a-zA-Z0-9_:%-]+)*$/.test(input.lastRoute)) out.lastRoute = input.lastRoute;
     return out;
   }
-  globalThis.OTSU4 = { version: '1.0.0', SUBJECTS, subjects, questions, sections, cards, register,
-    freshState, localDate, validDate, touch, recordAnswer, setReview, weakKeys, stats, shuffle, mockSet, grade, streak, validateState };
+  globalThis.OTSU4 = { version: '1.4.3', SUBJECTS, subjects, questions, sections, cards, register,
+    freshState, localDate, validDate, touch, recordAnswer, setReview, weakKeys, stats, rateLevel, progress, recentDays, shuffle, mockSet, grade, streak, validateState };
 })();

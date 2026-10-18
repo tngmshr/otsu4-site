@@ -1,7 +1,7 @@
 {
   "id": "./",
-  "name": "乙4 合格ドリル",
-  "short_name": "乙4ドリル",
+  "name": "乙4道場",
+  "short_name": "乙4道場",
   "description": "乙種第4類の学習と復習を手元に。",
   "lang": "ja",
   "start_url": "./#/home",

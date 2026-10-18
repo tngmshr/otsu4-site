@@ -12,23 +12,41 @@
     const section = C.sections.get(`${q.subject}:${q.section}`);
     return section ? link(`text/${encodeURIComponent(section.key)}`, `テキスト：${section.title}`) : '<p class="muted">関連テキストはデータなし</p>';
   }
-  function explanation(q, selected, withReview = true) {
+  // Verdict for one answered question; text marks (○ / ✕) back up the color.
+  function verdict(q, selected) {
+    const correct = selected === q.answer, mine = selected == null ? '未回答' : `${selected + 1}`;
+    return `<p class="verdict ${correct ? 'good' : 'bad'}"><strong>${correct ? '○ 正解' : selected == null ? '✕ 未回答' : '✕ 不正解'}</strong>
+      <span>あなたの回答 ${escape(mine)} ／ 正解 ${q.answer + 1}</span></p>`;
+  }
+  // Every choice with its mark, then its reason (questions' why) folded underneath.
+  // The chosen and correct choices start open; the others stay folded.
+  function choiceReview(q, selected) {
+    return `<ol class="choice-review">${q.choices.map((choice, i) => {
+      const right = i === q.answer, mine = i === selected, cls = right ? 'correct' : mine ? 'wrong' : '';
+      const tags = `${right ? '<span class="tag good">○ 正解</span>' : ''}${mine ? `<span class="tag ${right ? 'good' : 'bad'}">${right ? '' : '✕ '}あなたの回答</span>` : ''}`;
+      return `<li class="choice-item ${cls}"><div class="choice-head"><span class="number" aria-hidden="true">${right ? '○' : mine ? '✕' : i + 1}</span>
+        <span class="choice-text"><span class="sr">${i + 1}．</span>${escape(choice)}${tags ? `<span class="tags">${tags}</span>` : ''}</span></div>
+        <details class="why" ${right || mine ? 'open' : ''}><summary>${i + 1} の理由</summary><p>${escape(q.why[i] || '選択肢の理由はデータなし')}</p></details></li>`;
+    }).join('')}</ol>`;
+  }
+  // Overall explanation (explain) and its basis (ref) below the per-choice reasons.
+  function explanation(q, selected, withReview = true, withChoices = false) {
     const correct = selected === q.answer;
     return `<div class="card explanation ${correct ? '' : 'incorrect'}">
-      <h2 class="${correct ? 'good' : 'bad'}">${correct ? '○ 正解' : selected == null ? '✕ 未回答' : '✕ 不正解'}</h2>
+      ${withChoices ? choiceReview(q, selected) : ''}
+      <h2>総合解説</h2>
       <p>正解は <strong>${q.answer + 1}．${escape(q.choices[q.answer])}</strong></p>
       <p>${escape(q.explain || '全体の解説はデータなし')}</p>
-      ${q.choices.map((choice, i) => `<div class="reason"><strong class="${i === q.answer ? 'good' : 'bad'}">${i === q.answer ? '○' : '✕'} ${i + 1}．${escape(choice)}</strong><p>${escape(q.why[i] || '選択肢の理由はデータなし')}</p></div>`).join('')}
-      ${q.ref ? `<p class="muted">根拠：${escape(q.ref)}</p>` : ''}
+      ${q.ref ? `<p class="ref"><strong>根拠</strong>　${escape(q.ref)}</p>` : ''}
       <div class="stack">${sectionLink(q)}</div>
       ${withReview ? `<label class="check"><input type="checkbox" data-review="${escape(q.key)}" ${U.state.answers[q.key]?.review ? 'checked' : ''}>あとで見直す</label>` : ''}
     </div>`;
   }
   const U = globalThis.StudyUI = {
-    C, escape, percent, link, button, subjectOptions, field, empty, sectionLink, explanation,
+    C, escape, percent, link, button, subjectOptions, field, empty, sectionLink, verdict, choiceReview, explanation,
     dev: new URLSearchParams(location.search).get('dev') === '1', state: C.freshState(),
     filters: { subject: '', chapter: '', level: '', count: '10' },
-    cardFilter: '', cardScope: 'pending', deck: [], cardIndex: 0, flipped: false,
+    resultFilter: 'all', cardFilter: '', cardScope: 'pending', deck: [], cardIndex: 0, flipped: false,
     message: '', storageProblem: '', dataProblem: '', installPrompt: null,
     go(route) { const hash = `#/${route}`; if (location.hash === hash) U.render(); else location.hash = hash; },
     notify(message) { U.message = message; U.status(); },

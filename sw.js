@@ -1,9 +1,9 @@
 'use strict';
-const VERSION = '1.1.2';
+const VERSION = '1.4.3';
 const PREFIX = 'otsu4-study-';
 const CACHE = `${PREFIX}${VERSION}`;
 const BASE = new URL('./', self.location.href);
-const SHELL = ['index.html', 'css/app.css', 'js/core.js', 'js/ui.js', 'js/views.js', 'js/lock.js', 'js/app.js',
+const SHELL = ['index.html', 'css/app.css', 'js/core.js', 'js/ui.js', 'js/charts.js', 'js/awards.js', 'js/views.js', 'js/lock.js', 'js/app.js',
   'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'SOURCES.md'];
 const OPTIONAL = ['data/hourei.js', 'data/butsuka.js', 'data/seishou.js', 'data/bundle.enc.json'];
 const url = path => new URL(path, BASE).href;

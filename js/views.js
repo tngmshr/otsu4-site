@@ -13,6 +13,7 @@
       ${date ? `<p>${e(date)} の試験まで</p><p>${remaining > 0 ? `<strong class="big-number">${remaining}</strong> 日` : remaining === 0 ? '今日は試験日です' : '設定した試験日は過ぎています'}</p>` : '<p>試験日を決めて、学習のペースをつくろう。</p>'}
       ${link('settings', date ? '試験日を変更' : '試験日を設定')}</section>
       <div class="grid">${link(active ? 'session' : state.lastRoute.slice(2), '続きから', 'button primary')}${button('start-review', `今日の復習 ${weak}問`)}</div>
+      ${StudyCharts.progress()}
       <h2>科目ごとの進み具合</h2>${C.SUBJECTS.map(s => {
         const sub = C.subjects.get(s.id), sections = sub.chapters.flatMap(c => c.sections);
         return `<section class="card"><div class="row"><h2>${e(s.short)}</h2><span class="badge">${sub.questions.length ? `${sub.questions.length}問` : 'データなし'}</span></div><p>${e(sub.name)}</p>
@@ -20,7 +21,7 @@
           ${link(`text/${s.id}`, 'テキストを読む', 'button wide')}</section>`;
       }).join('')}
       <div class="grid">${link('mock', '模擬試験')}${link('review', '苦手の復習')}</div>
-      <div class="card"><p>連続学習 <strong>${C.streak(state)}日</strong>。自分のペースで続けましょう。</p><div class="links">${link('guide', '試験ガイド', '')}${link('about', 'このアプリについて', '')}</div>
+      <div class="card"><p>連続学習 <strong>${C.streak(state)}日</strong>。自分のペースで続けましょう。</p><div class="links">${link('titles', `称号 ${OTSU4Awards.TITLES.filter(t => (state.awards || {})[t.id]).length} / ${OTSU4Awards.TITLES.length}`, '')}${link('guide', '試験ガイド', '')}${link('about', 'このアプリについて', '')}</div>
       ${U.installPrompt ? button('install', 'ホーム画面に追加', '', 'wide') : ''}</div>`;
   }
   function text(parts) {
@@ -77,17 +78,18 @@
     return `${heading(mock ? '模擬試験' : a.mode === 'review' ? '苦手の復習' : '問題演習')}
       <div class="row wrap"><span class="badge">${e(C.subjects.get(q.subject).short)} / ${['基本', '標準', '応用'][q.level - 1]}</span><strong>${a.index + 1} / ${list.length}問</strong>${mock ? '<span class="timer" id="timer" role="timer"></span>' : ''}</div>
       <div class="bar"><span style="width:${(a.index + 1) / list.length * 100}%"></span></div>
-      <section class="card"><h2>${e(q.q)}</h2><div class="choices">${q.choices.map((choice, i) => {
-        const cls = mock ? (selected === i ? 'selected' : '') : answered ? i === q.answer ? 'correct' : i === selected ? 'wrong' : '' : '';
-        return `<button type="button" class="choice ${cls}" data-action="answer" data-choice="${i}" ${!mock && answered ? 'disabled' : ''} ${mock ? `aria-pressed="${selected === i}"` : ''}><span class="number">${i + 1}</span><span>${e(choice)}${!mock && answered && i === q.answer ? ' ○ 正解' : !mock && answered && i === selected ? ' ✕' : ''}</span></button>`;
-      }).join('')}</div>${mock ? '<p class="muted">回答は終了まで変更できます。未回答のまま次へ進むこともできます。</p>' : ''}</section>
+      <section class="card"><h2>${e(q.q)}</h2>${!mock && answered ? `${U.verdict(q, selected)}${U.choiceReview(q, selected)}` : `<div class="choices">${q.choices.map((choice, i) =>
+        `<button type="button" class="choice ${mock && selected === i ? 'selected' : ''}" data-action="answer" data-choice="${i}" ${mock ? `aria-pressed="${selected === i}"` : ''}><span class="number">${i + 1}</span><span>${e(choice)}</span></button>`).join('')}</div>`}
+        ${mock ? '<p class="muted">回答は終了まで変更できます。未回答のまま次へ進むこともできます。</p>' : ''}</section>
       ${!mock && answered ? U.explanation(q, selected) : ''}
-      <div class="grid">${button('previous', '前の問題', a.index ? '' : 'disabled')}${button(a.index === list.length - 1 ? 'finish' : 'next', a.index === list.length - 1 ? '終了・採点' : '次の問題', !mock && !answered ? 'disabled' : '', 'primary')}</div>
       ${mock ? `<details class="card"><summary>回答状況（${Object.keys(a.answers).length} / ${list.length}問）</summary><div class="question-jump">${list.map((x, i) => button('jump', `${i + 1}${Object.prototype.hasOwnProperty.call(a.answers, x.key) ? ' ✓' : ''}`, `data-index="${i}" aria-label="第${i + 1}問${Object.prototype.hasOwnProperty.call(a.answers, x.key) ? ' 回答済み' : ' 未回答'}"`)).join('')}</div></details>${button('finish', 'ここで試験を終了・採点', '', 'wide')}` : ''}
-      <p class="muted">進行状況は自動保存します。ホームの「続きから」で再開できます。模擬試験の残り時間は中断中も進みます。</p>`;
+      <p class="muted">進行状況は自動保存します。ホームの「続きから」で再開できます。模擬試験の残り時間は中断中も進みます。</p>
+      <div class="action-bar">${button('previous', '前へ', a.index ? '' : 'disabled')}${button(a.index === list.length - 1 ? 'finish' : 'next', a.index === list.length - 1 ? '終了・採点' : '次へ ›', !mock && !answered ? 'disabled' : '', 'primary')}</div>`;
   }
   function result(a) {
     const list = a.keys.map(k => C.questions.get(k)).filter(Boolean), grade = C.grade(list, a.answers), mock = a.mode === 'mock';
+    const items = list.map((q, i) => ({ q, i })), wrong = items.filter(({ q }) => a.answers[q.key] !== q.answer);
+    const wrongOnly = U.resultFilter === 'wrong', shown = wrongOnly ? wrong : items;
     return `${heading(mock ? '模擬試験の結果' : '演習の結果')}
       <section class="card"><p class="eyebrow">${mock ? new Date(a.started).toLocaleString('ja-JP') : 'おつかれさまでした'}</p>
         <h2 class="${grade.passed || !mock ? 'good' : 'bad'}">${mock ? grade.incomplete || list.length !== a.keys.length ? '合否判定できません（科目・問題データ不足）' : grade.passed ? '○ 合格' : '✕ 不合格' : '演習を完了しました'}</h2>
@@ -95,7 +97,10 @@
         ${mock ? grade.scores.map(s => `<p>${e(C.subjects.get(s.subject).short)}：${s.correct} / ${s.total}問　<strong class="${s.rate >= .6 && s.total ? 'good' : 'bad'}">${percent(s.correct, s.total)} ${s.total ? s.rate >= .6 ? '○' : '✕' : '判定不可'}</strong></p>`).join('') : ''}
         ${mock && C.SUBJECTS.some(s => grade.scores.find(x => x.subject === s.id).total < s.target) ? '<p class="note">問題数が不足した短縮試験の結果です。本番相当の結果ではありません。</p>' : ''}
       </section><div class="grid">${link('review', '苦手を復習する')}${link('records', '学習の記録')}</div><h2>全問の解説</h2>
-      ${list.map((q, i) => `<details class="card"><summary><span class="${a.answers[q.key] === q.answer ? 'good' : 'bad'}">${a.answers[q.key] === q.answer ? '○' : '✕'}</span> ${i + 1}．${e(q.q)}</summary><p>あなたの回答：${a.answers[q.key] == null ? '未回答' : `${a.answers[q.key] + 1}．${e(q.choices[a.answers[q.key]])}`}</p>${U.explanation(q, a.answers[q.key])}</details>`).join('')}${link('practice', '演習へ戻る', 'button wide')}`;
+      <div class="segmented" role="group" aria-label="表示する問題">${button('result-filter', `すべて（${list.length}）`, `data-filter="all" aria-pressed="${!wrongOnly}"`)}${button('result-filter', `間違えた問題（${wrong.length}）`, `data-filter="wrong" aria-pressed="${wrongOnly}"`)}</div>
+      ${shown.length ? shown.map(({ q, i }) => { const mine = a.answers[q.key], ok = mine === q.answer;
+        return `<details class="card result-item ${ok ? 'correct' : 'wrong'}"><summary><span class="${ok ? 'good' : 'bad'}"><span aria-hidden="true">${ok ? '○' : '✕'}</span> ${ok ? '正解' : mine == null ? '未回答' : '不正解'}</span> ${i + 1}．${e(q.q)}</summary>
+          ${U.verdict(q, mine)}${U.explanation(q, mine, true, true)}</details>`; }).join('') : '<p class="empty">間違えた問題はありません。全問正解です。</p>'}${link('practice', '演習へ戻る', 'button wide')}`;
   }
   function cards() {
     const all = [...C.cards.values()].filter(c => !U.cardFilter || c.subject === U.cardFilter);
@@ -122,7 +127,7 @@
       <section class="card"><h2>学習データのバックアップ</h2><p>記録・設定・進行中の演習をJSONに保存できます。読み込みは現在のデータを置き換えます。</p><div class="stack">${button('export', '学習データを書き出す', '', 'primary')}
         ${field('学習データを読み込む（JSON・5MBまで）', '<input class="file-input" type="file" id="import-file" accept="application/json,.json">')}</div></section>
       ${globalThis.OTSU4Lock && OTSU4Lock.hasKey() ? `<section class="card"><h2>パスワード</h2><p>この端末ではパスワードを記憶しています。</p>${button('forgetKey', 'この端末のパスワード記憶を消す', '', 'wide')}</section>` : ''}<section class="card"><h2>リセット</h2><p>${U.dev ? '開発モード' : '通常モード'}の学習記録と設定を削除します。必要なら先に書き出してください。</p>${button('reset', '学習データをリセット', '', 'danger wide')}</section>
-      <div class="links">${link('guide', '試験ガイド', '')}${link('about', 'このアプリについて', '')}</div>`;
+      <div class="links">${link('titles', '称号の一覧', '')}${link('guide', '試験ガイド', '')}${link('about', 'このアプリについて', '')}</div>`;
   }
   function guide() {
     return `${heading('試験ガイド')}<p class="note">最新情報は必ず公式で確認してください。免除の有無や地域により案内が異なります。</p>
@@ -130,9 +135,32 @@
       <section class="card"><h2>受験までの流れ</h2><ol><li>受験地域の公式日程・受験案内を確認する</li><li>案内に従って申請し、受験手数料を納付する</li><li>受験票や持参物、会場・時刻を確認する</li><li>受験後に合格発表と免状交付の手続きを確認する</li></ol><div class="stack"><a class="button" href="https://www.shoubo-shiken.or.jp/kikenbutsu/" target="_blank" rel="noopener">消防試験研究センター：受験案内</a><a class="button" href="https://www.shoubo-shiken.or.jp/kikenbutsu/annai/subject.html" target="_blank" rel="noopener">公式の試験科目・問題数</a><a class="button" href="https://www.shoubo-shiken.or.jp/faq/index_kiken.html" target="_blank" rel="noopener">公式のFAQ（時間・合格基準等）</a><a class="button" href="https://www.shoubo-shiken.or.jp/kikenbutsu/exercise.html" target="_blank" rel="noopener">公式の公開問題</a></div></section>`;
   }
   function about() {
-    return `${heading('このアプリについて')}<section class="card"><h2>乙4 合格ドリル</h2><p>アプリ版数：${C.version}</p><p>内容の正確性には努めていますが、正確性や合格を保証するものではありません。法改正に注意し、最新の法令・公式案内を確認してください。</p><p>問題とテキストはオリジナル教材を登録する形式です。開発用サンプルは試験知識を表すものではありません。</p></section>
+    return `${heading('このアプリについて')}<section class="card"><h2>乙4道場</h2><p>アプリ版数：${C.version}</p><p>内容の正確性には努めていますが、正確性や合格を保証するものではありません。法改正に注意し、最新の法令・公式案内を確認してください。</p><p>問題とテキストはオリジナル教材を登録する形式です。開発用サンプルは試験知識を表すものではありません。</p></section>
       <section class="card"><h2>データの扱い</h2><p>学習記録はこの端末・このブラウザのlocalStorageだけに保存します。学習記録をサーバーへ送る機能はありません。ブラウザのデータ削除や端末変更で失われるため、設定から書き出して保管してください。</p><p>通常モードと開発モードの記録は別々です。オフライン利用には一度オンラインでアプリを開いてください。配信元への通常のページ・教材取得は発生します。</p><h2>ホーム画面に追加</h2><p>Android等ではブラウザメニューの「インストール」や「ホーム画面に追加」を選びます。iPhoneではSafariの共有メニューから追加できます。</p></section>
       <section class="card"><h2>出典</h2><p>試験ガイドは消防試験研究センターの公式案内を参照しています。確認日：2026-10-07。教材本文の根拠は各問題の表示・各科目データ担当の出典記録を参照してください。</p><div class="stack"><a class="button" href="SOURCES.md">出典と仕様上の注意</a><a class="button" href="https://laws.e-gov.go.jp/law/323AC1000000186" target="_blank" rel="noopener">e-Gov：消防法</a><a class="button" href="https://www.fdma.go.jp/" target="_blank" rel="noopener">総務省消防庁</a>${link('guide', '試験ガイド')}</div></section>`;
   }
-  globalThis.StudyViews = { home, text, practice, review, mock, session, result, cards, records, settings, guide, about };
+  function titles() {
+    const A = OTSU4Awards, got = U.state.awards || {}, count = A.TITLES.filter(t => got[t.id]).length;
+    return `${heading('称号', '積み重ねの証')}<section class="card"><p>獲得 <strong class="big-number">${count}</strong> / ${A.TITLES.length}</p><div class="bar"><span style="width:${count / A.TITLES.length * 100}%"></span></div>
+      ${got.ending ? link('ending', 'エンディングをもう一度見る', 'button primary wide') : ''}</section>
+      <ul class="title-list">${A.TITLES.map(t => got[t.id]
+        ? `<li class="card title-item earned"><span class="title-icon" aria-hidden="true">★</span><div><p class="title-name">${e(t.name)}<span class="sr">（獲得済み）</span></p><p class="muted">${e(t.hint)}</p><p class="title-meta">${'★'.repeat(t.tier)}<span class="sr">ランク${t.tier}</span>　${e(got[t.id])} 獲得</p></div></li>`
+        : `<li class="card title-item"><span class="title-icon" aria-hidden="true">？</span><div><p class="title-name">？？？<span class="sr">（未獲得）</span></p><p class="muted">条件：${e(t.hint)}</p><p class="title-meta">${'☆'.repeat(t.tier)}<span class="sr">ランク${t.tier}</span>　未獲得</p></div></li>`).join('')}</ul>
+      ${link('home', 'ホームへ', 'back')}`;
+  }
+  // Ending: stats, then a staff roll that scrolls once (static when reduced motion is preferred).
+  function ending() {
+    const A = OTSU4Awards;
+    if (!(U.state.awards || {}).ending) return `${heading('エンディング')}<section class="card"><p class="empty">「全科目制覇」と「模試合格」を達成すると、ここでエンディングを見られます。</p>${link('titles', '称号の一覧', 'button wide')}</section>`;
+    const s = A.summary(U.state), best = s.best ? `${s.best.correct} / ${s.best.total}問（${percent(s.best.correct, s.best.total)}）` : '—';
+    const roll = [['乙4道場', 'ENDING'], ['学習した日', `${s.days}日`], ['はじめた日', s.first || '—'], ['解いた問題', `${s.unique}問`], ['解答した回数', `${s.answers}回`],
+      ['模擬試験', `${s.exams}回`], ['最高点', best], ['獲得した称号', s.titles.map(t => e(t.name)).join('<br>')], ['主演', 'あなた'], ['学習・努力', 'あなた'],
+      ['教材', C.SUBJECTS.map(x => e(x.short)).join('・')], ['応援', '乙4道場']];
+    return `<section class="ending"><div class="ending-hero"><p class="eyebrow">ALL CLEAR</p><h1>乙4マスター</h1><p>全科目を制覇し、模擬試験に合格しました。<br>ここまでの道のり、おつかれさまでした。</p></div>
+      <div class="ending-stats"><div class="metric"><strong>${s.days}</strong>学習日数</div><div class="metric"><strong>${s.unique}</strong>解いた問題</div><div class="metric"><strong>${s.best ? percent(s.best.correct, s.best.total) : '—'}</strong>最高点</div></div>
+      <div class="credits" id="credits"><div class="credits-roll">${roll.map(([k, v]) => `<div class="credit"><p class="credit-role">${e(k)}</p><p class="credit-name">${k === '獲得した称号' || k === '教材' ? v : e(v)}</p></div>`).join('')}
+        <div class="credit the-end"><p class="credit-name">本番でも、この力で。</p><p class="credit-role">THE END</p></div></div></div>
+      <div class="grid">${button('credits-skip', '止めて全部見る')}${link('titles', '称号の一覧')}</div>${link('home', 'ホームへ', 'button primary wide')}</section>`;
+  }
+  globalThis.StudyViews = { home, text, practice, review, mock, session, result, cards, records, settings, guide, about, titles, ending };
 })();
